@@ -193,7 +193,7 @@ export default function App() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5', letterSpacing: '1px' }}>{label}</span>
         
-        {/* Контейнер теперь подстраивается под высоту контента без обрезания краев */}
+        {/* Контейнер адаптируется под высоту контента без деформации краев */}
         <div style={{ width: '100%', height: 'auto', maxHeight: '500px', position: 'relative', overflow: 'hidden', border: '1px solid #171717', backgroundColor: '#050505', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           {isUploaded ? (
             type === 'video' ? (
@@ -202,7 +202,7 @@ export default function App() {
               <img src={previewUrl} alt="User preview" style={{ width: '100%', maxHeight: '500px', objectFit: 'contain' }} />
             )
           ) : (
-            // Цвета сохранены, добавлена лишь мягкая прозрачность для состояния примера
+            // Цвета сохранены, оставлена мягкая прозрачность для состояния примера
             type === 'video' ? (
               <video src={exampleUrl} style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', opacity: 0.4 }} muted playsInline loop autoPlay />
             ) : (
@@ -408,8 +408,8 @@ export default function App() {
   // --- РЕНДЕР: ВЫБОР ТИПА ---
   if (step === 'TYPE_SELECTION') {
     return (
-      <div style={{ maxWidth: '440px', margin: '0 auto', padding: '40px 100px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ textAlignment: 'center', marginBottom: '48px' }}>
+      <div style={{ maxWidth: '440px', margin: '0 auto', padding: '40px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ marginBottom: '48px' }}>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 300, letterSpacing: '5px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>CARTEL MODELS</h1>
           <p style={{ fontSize: '0.7rem', fontWeight: 400, letterSpacing: '2px', textTransform: 'uppercase', color: '#737373', margin: 0, textAlign: 'center' }}>Select Type of Cooperation</p>
         </div>
@@ -429,7 +429,7 @@ export default function App() {
   return (
     <div style={{ maxWidth: '440px', margin: '0 auto', padding: '24px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif' }}>
       
-      {/* Плавные и стабильные CSS-стили для перелива без нагрузки */}
+      {/* Плавные CSS-стили для аппаратного перелива без нагрузки на React-стейты */}
       <style>{`
         @keyframes luxuryGlow {
           0% { background-position: 0% 50%; }
