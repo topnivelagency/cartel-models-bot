@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const EXAMPLES = {
   photo1: 'https://sanixqycrowmzpvvesdm.supabase.co/storage/v1/object/sign/model-media/profile-1.webp?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV81YzI2OWYwNS1kZjhhLTRjOTctYmIwOC02ZWUzYzQ5M2Q1ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJtb2RlbC1tZWRpYS9wcm9maWxlLTEud2VicCIsImlhdCI6MTc3OTQ2NjYwOSwiZXhwIjoxODExMDAyNjA5fQ.tX8QoDlHEVaVq0yscZ45tIbxd8rAbR4WYSfZoCo3T3Q',
   photo2: 'https://sanixqycrowmzpvvesdm.supabase.co/storage/v1/object/sign/model-media/profile-2.webp?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV81YzI2OWYwNS1kZjhhLTRjOTctYmIwOC02ZWUzYzQ5M2Q1ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJtb2RlbC1tZWRpYS9wcm9maWxlLTIud2VicCIsImlhdCI6MTc3OTQ2NjY1NywiZXhwIjoxODExMDAyNjU3fQ.oQzT-Os1EjwmUEyvjwfPF7iWEtWVwaNG8Gu_aZKGmAc',
-  photo3: 'https://sanixqycrowmzpvvesdm.supabase.co/storage/v1/object/sign/model-media/profile-3.webp?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV81YzI2OWYwNS1kZjhhLTRjOTctYmIwOC02ZWUzYzQ5M2Q1ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJtb2RlbC1tZWRpYS9wcm9maWxlLTMud2VicCIsImlhdCI6MTc3OTQ2ODgyNiwiZXhwIjoxODExMDA0ODI2fQ.1ETvV09c5o92RIIzk2iNKIwV3zwUnF5eSAG3-gcbqOU',
+  photo3: 'https://sanixqycrowmzpvvesdm.supabase.co/storage/v1/object/sign/model-media/profile-3.webp?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV81YzI2OWYwNS1kZjhhLTRjOTctYmIwOC02ZWUzYzQ5M2Q1ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJtb2RlbC1tZWRpYS9wcm9maWxlLTMud2VicCIsImlhdCI6MTc3OTQ2NjgzMywiZXhwIjoxODExMDAyNjgzfQ.Vz248-8E0RvQ3JVaEqNJ7tWcUWYwT0sprzmlDwlTi1s',
   video: 'https://sanixqycrowmzpvvesdm.supabase.co/storage/v1/object/sign/model-media/profile-video.mp4?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV81YzI2OWYwNS1kZjhhLTRjOTctYmIwOC02ZWUzYzQ5M2Q1ZGUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJtb2RlbC1tZWRpYS9wcm9maWxlLXZpZGVvLm1wNCIsImlhdCI6MTc3OTQ2NjcwNCwiZXhwIjoxODExMDAyNzA0fQ.pTjEOA47M0Wi7pwc3V7rUFNChxDeG4x8iCa1hrqKKSY',
 };
 
@@ -61,21 +61,41 @@ export default function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Проверка файлов на уровне JS (чтобы избежать "молчания" отправки)
+    if (!files.photo1 || !files.photo2 || !files.photo3 || !files.video) {
+      alert("Пожалуйста, загрузите все обязательные фото и видео материалы перед отправкой.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const uploadedUrls: { [key: string]: string } = {};
 
+      // 1. Загрузка файлов в Bucket
       for (const [key, file] of Object.entries(files)) {
         if (file) {
           const fileExt = file.name.split('.').pop();
           const fileName = `${tgUser?.id || 'anon'}_${key}_${Date.now()}.${fileExt}`;
-          const { error } = await supabase.storage.from('model-media').upload(fileName, file);
-          if (error) throw error;
+          
+          console.log(`Загрузка файла: ${fileName}...`);
+          
+          const { error: uploadError } = await supabase.storage
+            .from('model-media')
+            .upload(fileName, file);
+
+          if (uploadError) {
+            throw new Error(`Ошибка загрузки медиа (${key}): ${uploadError.message}`);
+          }
+          
           uploadedUrls[key] = fileName;
         }
       }
 
+      console.log("Медиа загружено успешно. Запись в базу данных...");
+
+      // 2. Запись данных в таблицу (добавлено поле моделинга по умолчанию)
       const { error: dbError } = await supabase.from('models').insert([
         {
           telegram_id: tgUser?.id || null,
@@ -87,26 +107,29 @@ export default function App() {
           about: formData.about,
           photos: [uploadedUrls.photo1, uploadedUrls.photo2, uploadedUrls.photo3].filter(Boolean),
           video: uploadedUrls.video || null,
+          models_types: "Моделинг" // Поле из ТЗ, предотвращает ошибку пустой строки
         },
       ]);
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        throw new Error(`Ошибка базы данных: ${dbError.message}. Код: ${dbError.code}`);
+      }
 
       alert('Анкета успешно отправлена!');
+      
       const tg = (window as any).Telegram?.WebApp;
       if (tg) {
         tg.sendData('anketa_sent');
         tg.close();
       }
     } catch (err: any) {
-      console.error(err);
-      alert('Ошибка при отправке: ' + err.message);
+      console.error("Критическая ошибка:", err);
+      alert('Произошла ошибка: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Вспомогательный компонент для стилизованной кнопки загрузки
   const UploadButton = ({ name, label, fileObject }: { name: keyof FilesState, label: string, fileObject: File | null }) => (
     <label style={{
       display: 'flex',
@@ -126,7 +149,6 @@ export default function App() {
         type="file" 
         name={name} 
         accept={name === 'video' ? 'video/*' : 'image/*'} 
-        required 
         onChange={handleFileChange} 
         style={{ display: 'none' }} 
       />
@@ -157,7 +179,6 @@ export default function App() {
   return (
     <div style={{ maxWidth: '440px', margin: '0 auto', padding: '24px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.01em' }}>
       
-      {/* Шапка */}
       <div style={{ textAlign: 'center', marginBottom: '40px', marginTop: '10px' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 300, letterSpacing: '4px', textTransform: 'uppercase', margin: '0 0 8px 0', color: '#ffffff' }}>CARTEL</h1>
         <p style={{ fontSize: '0.65rem', fontWeight: 400, letterSpacing: '2px', textTransform: 'uppercase', color: '#737373', margin: 0 }}>Application Form</p>
@@ -165,11 +186,10 @@ export default function App() {
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
         
-        {/* Поля ввода */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#a3a3a3', marginBottom: '8px' }}>Полное Имя</label>
-            <input type="text" name="name" required onChange={handleInputChange} style={{ width: '100%', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '2px', color: '#fff', fontSize: '0.9rem', transition: 'border-color 0.2s' }} onFocus={(e) => e.target.style.borderColor = '#525252'} onBlur={(e) => e.target.style.borderColor = '#262626'} />
+            <input type="text" name="name" required onChange={handleInputChange} style={{ width: '100%', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '2px', color: '#fff', fontSize: '0.9rem' }} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -201,43 +221,37 @@ export default function App() {
 
         <div style={{ height: '1px', backgroundColor: '#171717', margin: '10px 0' }}></div>
         
-        {/* Раздел Медиафайлов */}
         <div>
           <h3 style={{ fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '2px', color: '#ffffff', marginBottom: '24px', textAlign: 'center' }}>Медиаматериалы</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             
-            {/* 1. ФОТО АНФАС */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#e5e5e5' }}>1. Портрет анфас (без макияжа)</div>
-              <img src={EXAMPLES.photo1} alt="Пример анфас" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '1px', border: '1px solid #171717' }} />
+              <img src={EXAMPLES.photo1} alt="Пример анфас" style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '1px', filter: 'grayscale(100%)', border: '1px solid #171717' }} />
               <UploadButton name="photo1" label="Загрузить Анфас" fileObject={files.photo1} />
             </div>
 
-            {/* 2. ФОТО ПРОФИЛЬ */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#e5e5e5' }}>2. Портрет в профиль (без макияжа)</div>
-              <img src={EXAMPLES.photo2} alt="Пример профиль" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '1px', border: '1px solid #171717' }} />
+              <img src={EXAMPLES.photo2} alt="Пример профиль" style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '1px', filter: 'grayscale(100%)', border: '1px solid #171717' }} />
               <UploadButton name="photo2" label="Загрузить Профиль" fileObject={files.photo2} />
             </div>
 
-            {/* 3. ФОТО ПОЛНЫЙ РОСТ */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#e5e5e5' }}>3. В полный рост (светлое белье)</div>
-              <img src={EXAMPLES.photo3} alt="Пример полный рост" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '1px', border: '1px solid #171717' }} />
+              <img src={EXAMPLES.photo3} alt="Пример полный рост" style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '1px', filter: 'grayscale(100%)', border: '1px solid #171717' }} />
               <UploadButton name="photo3" label="Загрузить Полный Рост" fileObject={files.photo3} />
             </div>
 
-            {/* 4. ВИДЕО ПРОХОДКА */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#e5e5e5' }}>4. Вертикальная видео-проходка (до 20 сек)</div>
-              <video src={EXAMPLES.video} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '1px', backgroundColor: '#0a0a0a', border: '1px solid #171717' }} />
+              <video src={EXAMPLES.video} controls playsInline style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '1px', backgroundColor: '#0a0a0a', border: '1px solid #171717' }} />
               <UploadButton name="video" label="Загрузить Видео" fileObject={files.video} />
             </div>
 
           </div>
         </div>
 
-        {/* Главная Кнопка Отправки */}
         <button
           type="submit"
           disabled={loading}
