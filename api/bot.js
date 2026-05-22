@@ -1,21 +1,21 @@
-const { createClient } = require('@supabase/supabase-js');
+// Используем стандартный пакет https, чтобы не зависеть от версий fetch в Node.js
+const https = require('https');
 
-// Инициализация Supabase для бота (чтобы при необходимости слать уведомления админу)
-const SUPABASE_URL = 'https://sanixqycrowmzpvvesdm.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhbml4cXljcm93bXpwdnZlc2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTg5MTcsImV4cCI6MjA5NTAzNDkxN30.4dOt8DPrmJxD5k0OMxKnycU7I6936ZieuoU9UIWeVzM';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Твой токен от BotFather (лучше хранить в Environment Variables на Vercel)
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '8710096221:AAGuCb2TjL_jj4wCJR2wn7PyfWCU9ehxL2I';
+const TELEGRAM_TOKEN = '8710096221:AAGuCb2TjL_jj4wCJR2wn7PyfWCU9ehxL2I';
+// Твой домен фронтенда на Vercel, где крутится сама анкета
+const WEB_APP_URL = 'https://cartel-models-bot.vercel.app'; 
 
 module.exports = async (req, res) => {
-  // Проверяем, что запрос пришел методом POST от Telegram
+  // Telegram отправляет исключительно POST запросы
   if (req.method !== 'POST') {
-    return res.status(200).send('CARTEL MODELS Bot is running...');
+    return res.status(200).send('CARTEL MODELS Bot Server is active.');
   }
 
   try {
-    const { message, web_app_data } = req.body;
+    const body = req.body;
+    if (!body) return res.status(200).send('No body');
+
+    const message = body.message;
 
     // 1. ОБРАБОТКА КОМАНДЫ /start
     if (message && message.text === '/start') {
@@ -26,55 +26,74 @@ module.exports = async (req, res) => {
         `We are an exclusive scouting and management agency. ` +
         `If you want to become a part of our team, please click the button below to submit your application form.`;
 
-      // Отправляем сообщение со встроенной кнопкой Web App
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: welcomeText,
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '⚡ FILL APPLICATION',
-                  // Ссылка на твой созданный Web App в BotFather
-                  web_app: { url: 'https://cartel-models-bot.vercel.app/' } // Тут будет твой URL Vercel фронтенда
-                }
-              ]
+      const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+      
+      const payload = JSON.stringify({
+        chat_id: chatId,
+        text: welcomeText,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '⚡ FILL APPLICATION',
+                web_app: { url: WEB_APP_URL } // Ссылка строго на твой фронтенд на Vercel
+              }
             ]
-          }
-        })
+          ]
+        }
       });
+
+      // Отправка запроса в Telegram через HTTPS-модуль
+      await sendToTelegram(telegramUrl, payload);
     }
 
-    // 2. ОБРАБОТКА ДАННЫХ ИЗ WEB APP (когда форма шлет tg.sendData)
+    // 2. ОБРАБОТКА УСПЕШНОЙ ОТПРАВКИ ИЗ WEB APP
     if (message && message.web_app_data) {
       const chatId = message.chat.id;
       const dataAction = message.web_app_data.data;
 
       if (dataAction === 'application_sent') {
-        const successMessage = 
+        const successText = 
           `*Thank you!*\n\n` +
           `Your application has been successfully submitted. ` +
           `The representatives of *CARTEL MODELS* will review your profile and contact you shortly if your types match our criteria.`;
 
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: successMessage,
-            parse_mode: 'Markdown'
-          })
+        const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+        const payload = JSON.stringify({
+          chat_id: chatId,
+          text: successText,
+          parse_mode: 'Markdown'
         });
+
+        await sendToTelegram(telegramUrl, payload);
       }
     }
 
     return res.status(200).send('OK');
   } catch (error) {
-    console.error('Bot Error:', error);
-    return res.status(500).send('Internal Error');
+    console.error('Webhook Error:', error);
+    return res.status(200).send('Error Handled'); // Всегда возвращаем 200 для Telegram, чтобы он не спамил повторами
   }
 };
+
+// Хелпер для отправки HTTPS запросов без сторонних библиотек
+function sendToTelegram(url, data) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let responseBody = '';
+      res.on('data', (chunk) => responseBody += chunk);
+      res.on('end', () => resolve(responseBody));
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(data);
+    req.end();
+  });
+}
