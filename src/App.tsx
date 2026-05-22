@@ -419,7 +419,8 @@ export default function App() {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '40px 60px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <div style={{ marginBottom: '48px' }}>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: 300, letterSpacing: '6px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>CARTEL MODELS</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: 300, letterSpacing: '6px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>CARTEL</h1>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 300, letterSpacing: '12px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>MODELS</h3>
           <p style={{ fontSize: '0.75rem', fontWeight: 400, letterSpacing: '2.5px', textTransform: 'uppercase', color: '#737373', margin: 0, textAlign: 'center' }}>Select Type of Cooperation</p>
         </div>
 
