@@ -40,7 +40,7 @@ module.exports = async (req, res) => {
                 {
                   text: '⚡ FILL APPLICATION',
                   // Ссылка на твой созданный Web App в BotFather
-                  web_app: { url: 't.me/cartelmodelsbot/apply' } // Тут будет твой URL Vercel фронтенда
+                  web_app: { url: 'https://cartel-models-bot.vercel.app/' } // Тут будет твой URL Vercel фронтенда
                 }
               ]
             ]
