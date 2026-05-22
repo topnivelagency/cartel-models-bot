@@ -1,23 +1,21 @@
-// Используем стандартный пакет https, чтобы не зависеть от версий fetch в Node.js
 const https = require('https');
 
 const TELEGRAM_TOKEN = '8710096221:AAGuCb2TjL_jj4wCJR2wn7PyfWCU9ehxL2I';
-// Твой домен фронтенда на Vercel, где крутится сама анкета
 const WEB_APP_URL = 'https://cartel-models-bot.vercel.app'; 
 
 module.exports = async (req, res) => {
-  // Telegram отправляет исключительно POST запросы
   if (req.method !== 'POST') {
     return res.status(200).send('CARTEL MODELS Bot Server is active.');
   }
 
   try {
     const body = req.body;
-    if (!body) return res.status(200).send('No body');
+    if (!body) return res.status(200).send('Empty body');
 
+    // Безопасно извлекаем сообщение, если оно есть
     const message = body.message;
 
-    // 1. ОБРАБОТКА КОМАНДЫ /start
+    // 1. ОБРАБОТКА ТЕКСТОВОЙ КОМАНДЫ /start В ЧАТЕ БОТА
     if (message && message.text === '/start') {
       const chatId = message.chat.id;
       
@@ -37,18 +35,18 @@ module.exports = async (req, res) => {
             [
               {
                 text: '⚡ FILL APPLICATION',
-                web_app: { url: WEB_APP_URL } // Ссылка строго на твой фронтенд на Vercel
+                web_app: { url: WEB_APP_URL }
               }
             ]
           ]
         }
       });
 
-      // Отправка запроса в Telegram через HTTPS-модуль
       await sendToTelegram(telegramUrl, payload);
+      return res.status(200).send('Start command processed');
     }
 
-    // 2. ОБРАБОТКА УСПЕШНОЙ ОТПРАВКИ ИЗ WEB APP
+    // 2. ОБРАБОТКА СИСТЕМНОГО СООБЩЕНИЯ ИЗ WEB APP DATA (tg.sendData)
     if (message && message.web_app_data) {
       const chatId = message.chat.id;
       const dataAction = message.web_app_data.data;
@@ -67,17 +65,20 @@ module.exports = async (req, res) => {
         });
 
         await sendToTelegram(telegramUrl, payload);
+        return res.status(200).send('Web app notification sent');
       }
     }
 
-    return res.status(200).send('OK');
+    // Если пришел технический апдейт без message (открытие приложения, кнопка меню и т.д.)
+    return res.status(200).send('Update received but no action required');
+
   } catch (error) {
     console.error('Webhook Error:', error);
-    return res.status(200).send('Error Handled'); // Всегда возвращаем 200 для Telegram, чтобы он не спамил повторами
+    // Всегда возвращаем 200, чтобы Телеграм не гонял упавшие запросы по кругу
+    return res.status(200).send('Error processed'); 
   }
 };
 
-// Хелпер для отправки HTTPS запросов без сторонних библиотек
 function sendToTelegram(url, data) {
   return new Promise((resolve, reject) => {
     const req = https.request(url, {

@@ -6,7 +6,6 @@ const SUPABASE_URL = 'https://sanixqycrowmzpvvesdm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhbml4cXljcm93bXpwdnZlc2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTg5MTcsImV4cCI6MjA5NTAzNDkxN30.4dOt8DPrmJxD5k0OMxKnycU7I6936ZieuoU9UIWeVzM';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Постоянные публичные ссылки на примеры медиа
 const EXAMPLES = {
   photo1: `${SUPABASE_URL}/storage/v1/object/public/model-media/profile-1.webp`,
   photo2: `${SUPABASE_URL}/storage/v1/object/public/model-media/profile-2.webp`,
@@ -18,22 +17,25 @@ type ModelType = 'IMAGE' | 'TRIP' | 'RELATIONSHIP';
 type ViewMode = 'USER_FLOW' | 'ADMIN_LOGIN' | 'ADMIN_PANEL';
 
 export default function App() {
-  // Навигация
   const [viewMode, setViewMode] = useState<ViewMode>('USER_FLOW');
   const [step, setStep] = useState<'TYPE_SELECTION' | 'FORM' | 'SUCCESS'>('TYPE_SELECTION');
   const [selectedType, setSelectedType] = useState<ModelType | null>(null);
   
-  // Данные пользователя и формы
   const [tgUser, setTgUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '', age: '', height: '', parameters: '', instagram: '', about: '',
   });
+  
   const [files, setFiles] = useState<{ [key: string]: File | null }>({
     photo1: null, photo2: null, photo3: null, video: null,
   });
 
-  // Состояния для Админки
+  // Локальные ссылки для превью (Object URLs)
+  const [previews, setPreviews] = useState<{ [key: string]: string }>({
+    photo1: '', photo2: '', photo3: '', video: '',
+  });
+
   const [adminPassword, setAdminPassword] = useState('');
   const [modelsList, setModelsList] = useState<any[]>([]);
   const [adminTab, setAdminTab] = useState<ModelType>('IMAGE');
@@ -103,9 +105,28 @@ export default function App() {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const key = e.target.name;
     if (e.target.files && e.target.files[0]) {
-      setFiles({ ...files, [e.target.name]: e.target.files[0] });
+      const file = e.target.files[0];
+      setFiles(prev => ({ ...prev, [key]: file }));
+      
+      // Создаем временный URL для отображения превью на экране
+      const objectUrl = URL.createObjectURL(file);
+      setPreviews(prev => ({ ...prev, [key]: objectUrl }));
     }
+  };
+
+  const handleRemoveFile = (key: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Освобождаем память от созданного Object URL
+    if (previews[key]) {
+      URL.revokeObjectURL(previews[key]);
+    }
+    
+    setFiles(prev => ({ ...prev, [key]: null }));
+    setPreviews(prev => ({ ...prev, [key]: '' }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,13 +154,12 @@ export default function App() {
         }
       }
 
-      // Сохраняем имя пользователя телеграм, если оно доступно
       const tgUsername = tgUser?.username || null;
 
       const { error: dbError } = await supabase.from('models').insert([
         {
           telegram_id: tgUser?.id || null,
-          telegram_username: tgUsername, // добавочное поле для точных ссылок
+          telegram_username: tgUsername,
           name: formData.name,
           age: parseInt(formData.age),
           height: parseInt(formData.height),
@@ -155,17 +175,93 @@ export default function App() {
 
       if (dbError) throw new Error(`Database error: ${dbError.message}`);
 
+      // Сначала переключаем интерфейс на экран успеха
       setStep('SUCCESS');
       
+      // И только потом тихо уведомляем Telegram, не прерывая работу страницы
       const tg = (window as any).Telegram?.WebApp;
       if (tg && tg.sendData) {
-        tg.sendData('application_sent');
+        setTimeout(() => {
+          try { tg.sendData('application_sent'); } catch(e){}
+        }, 500);
       }
     } catch (err: any) {
       alert('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Компонент кастомной кнопки загрузки с переливом, превью и кнопкой отмены
+  const MediaUploadField = ({ name, label, type, exampleUrl }: { name: string, label: string, type: string, exampleUrl: string }) => {
+    const isUploaded = !!files[name];
+    const previewUrl = previews[name];
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5', letterSpacing: '1px' }}>{label}</span>
+        
+        {/* Контейнер для отображения (Превью пользователя ИЛИ Пример по умолчанию) */}
+        <div style={{ width: '100%', height: '240px', position: 'relative', overflow: 'hidden', border: '1px solid #171717', backgroundColor: '#050505' }}>
+          {isUploaded ? (
+            type === 'video' ? (
+              <video src={previewUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <img src={previewUrl} alt="User preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            )
+          ) : (
+            // Картинка-пример по умолчанию, если ничего не прикреплено
+            type === 'video' ? (
+              <video src={exampleUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.4, filter: 'grayscale(100%)' }} />
+            ) : (
+              <img src={exampleUrl} alt="Example layout" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.4, filter: 'grayscale(100%)' }} />
+            )
+          )}
+
+          {/* Плашка поверх превью, если файл успешно выбран */}
+          {isUploaded && (
+            <div onClick={(e) => handleRemoveFile(name, e)} style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: 'rgba(0,0,0,0.75)', color: '#ef4444', padding: '6px 10px', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid #b91c1c', cursor: 'pointer', borderRadius: '2px', display: 'flex', alignItems: 'center', gap: '4px', zIndex: 10 }}>
+              ✕ Remove
+            </div>
+          )}
+        </div>
+
+        {/* Кнопка загрузки с эффектом интерактивного перелива */}
+        <label className={isUploaded ? "" : "shimmer-button"} style={{ 
+          width: '100%', 
+          padding: '16px', 
+          backgroundColor: '#0a0a0a', 
+          border: isUploaded ? '1px solid #ffffff' : '1px dashed #333333', 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          gap: '8px',
+          cursor: 'pointer',
+          position: 'relative',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease'
+        }}>
+          <input type="file" name={name} accept={type === 'video' ? 'video/*' : 'image/*'} onChange={handleFileChange} style={{ display: 'none' }} />
+          
+          {isUploaded ? (
+            // Состояние: Файл прикреплен успешно
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ffffff' }}>
+              <svg style={{ width: '14px', height: '14px', color: '#ffffff' }} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '1.5px' }}>
+                {files[name]!.name.substring(0, 15)}... — OK
+              </span>
+            </div>
+          ) : (
+            // Состояние: Ожидание загрузки (с переливом)
+            <span style={{ fontSize: '0.7rem', color: '#a3a3a3', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+              Upload Material
+            </span>
+          )}
+        </label>
+      </div>
+    );
   };
 
   // --- РЕНДЕР: ВХОД В АДМИНКУ ---
@@ -187,14 +283,12 @@ export default function App() {
     );
   }
 
-  // --- РЕНДЕР: АДАПТИВНАЯ ПАНЕЛЬ АДМИНИСТРАТОРА ---
+  // --- РЕНДЕР: ПАНЕЛЬ АДМИНИСТРАТОРА ---
   if (viewMode === 'ADMIN_PANEL') {
     const filteredModels = modelsList.filter(m => m.model_type === adminTab);
 
     return (
       <div style={{ padding: '16px', backgroundColor: '#000', color: '#fff', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-        
-        {/* Инъекция стилей для отзывчивой сетки на мобильных телефонах */}
         <style>{`
           .admin-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; }
           .back-btn { display: none; }
@@ -214,7 +308,6 @@ export default function App() {
           <button onClick={() => { setViewMode('USER_FLOW'); setStep('TYPE_SELECTION'); }} style={{ backgroundColor: '#171717', color: '#fff', border: 'none', padding: '8px 14px', fontSize: '0.75rem', cursor: 'pointer' }}>Exit</button>
         </div>
 
-        {/* Категории табов */}
         <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
           {(['IMAGE', 'TRIP', 'RELATIONSHIP'] as ModelType[]).map(type => (
             <button key={type} onClick={() => { setAdminTab(type); setSelectedAdminModel(null); }} style={{ flex: 1, padding: '10px 4px', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.7rem', fontWeight: 600, backgroundColor: adminTab === type ? '#fff' : '#0a0a0a', color: adminTab === type ? '#000' : '#a3a3a3', border: '1px solid #262626', cursor: 'pointer' }}>
@@ -224,7 +317,6 @@ export default function App() {
         </div>
 
         <div className="admin-grid">
-          {/* Левая сторона: Список */}
           <div className="left-panel" style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '75vh', overflowY: 'auto' }}>
             {loading ? <p style={{ fontSize: '0.9rem', color: '#a3a3a3' }}>Loading...</p> : filteredModels.length === 0 ? <p style={{ color: '#525252', fontSize: '0.9rem' }}>No applications yet.</p> : 
               filteredModels.map(model => (
@@ -239,7 +331,6 @@ export default function App() {
             }
           </div>
 
-          {/* Правая сторона: Карточка просмотра */}
           <div className="right-panel" style={{ backgroundColor: '#0a0a0a', border: '1px solid #262626', padding: '20px', minHeight: '40vh' }}>
             {selectedAdminModel ? (
               <div>
@@ -266,19 +357,19 @@ export default function App() {
                     <p style={{ fontSize: '0.65rem', color: '#737373', margin: '0 0 2px 0', textTransform: 'uppercase' }}>Contacts</p>
                     <div><a href={`https://instagram.com/${selectedAdminModel.instagram?.replace('@','')}`} target="_blank" rel="noreferrer" style={{ color: '#fff', textDecoration: 'underline', fontSize: '0.85rem' }}>Instagram: {selectedAdminModel.instagram}</a></div>
                     
-                    {/* Кликабельная ссылка на профиль Telegram */}
                     <div style={{ marginTop: '4px' }}>
                       {selectedAdminModel.telegram_username ? (
                         <a href={`https://t.me/${selectedAdminModel.telegram_username}`} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 500 }}>
-                          Open Telegram Chat
+                          Open Telegram (via @{selectedAdminModel.telegram_username})
                         </a>
                       ) : selectedAdminModel.telegram_id ? (
-                        <span style={{ fontSize: '0.85rem', color: '#a3a3a3' }}>TG ID: {selectedAdminModel.telegram_id}</span>
+                        <a href={`tg://user?id=${selectedAdminModel.telegram_id}`} style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 500 }}>
+                          Open Telegram (via ID)
+                        </a>
                       ) : (
                         <span style={{ fontSize: '0.85rem', color: '#525252' }}>No TG Link</span>
                       )}
                     </div>
-
                   </div>
                 </div>
 
@@ -323,14 +414,14 @@ export default function App() {
         <p style={{ fontSize: '0.85rem', color: '#e5e5e5', letterSpacing: '0.5px', lineHeight: '1.6', maxWidth: '320px', margin: '0 auto 40px auto' }}>
           Your application has been successfully submitted! The representatives of CARTEL MODELS will contact you shortly.
         </p>
-        <button onClick={() => { setStep('TYPE_SELECTION'); setFormData({ name: '', age: '', height: '', parameters: '', instagram: '', about: '' }); setFiles({ photo1: null, photo2: null, photo3: null, video: null }); }} style={{ backgroundColor: '#ffffff', color: '#000000', padding: '14px 28px', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase', border: 'none', cursor: 'pointer' }}>
+        <button onClick={() => { setStep('TYPE_SELECTION'); setFormData({ name: '', age: '', height: '', parameters: '', instagram: '', about: '' }); setFiles({ photo1: null, photo2: null, photo3: null, video: null }); setPreviews({ photo1: '', photo2: '', photo3: '', video: '' }); }} style={{ backgroundColor: '#ffffff', color: '#000000', padding: '14px 28px', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase', border: 'none', cursor: 'pointer' }}>
           Back to Main
         </button>
       </div>
     );
   }
 
-  // --- РЕНДЕР: КЛИЕНТСКАЯ ФОРМА АНКЕТЫ ---
+  // --- РЕНДЕР: КЛИЕНТСКИЙ ВЫБОР ТИПА ---
   if (step === 'TYPE_SELECTION') {
     return (
       <div style={{ maxWidth: '440px', margin: '0 auto', padding: '40px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -350,8 +441,26 @@ export default function App() {
     );
   }
 
+  // --- РЕНДЕР: КЛИЕНТСКАЯ АНКЕТА ---
   return (
     <div style={{ maxWidth: '440px', margin: '0 auto', padding: '24px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif' }}>
+      
+      {/* Стили для анимации плавного перелива кнопок */}
+      <style>{`
+        @keyframes subtleShimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .shimmer-button {
+          background: linear-gradient(90deg, #0a0a0a 0%, #141414 25%, #1f1f1f 50%, #141414 75%, #0a0a0a 100%) !important;
+          background-size: 200% 100% !important;
+          animation: subtleShimmer 4s infinite linear;
+        }
+        .shimmer-button:hover {
+          border-color: #525252 !important;
+        }
+      `}</style>
+
       <div style={{ textAlign: 'center', marginBottom: '40px' }}>
         <h1 style={{ fontSize: '1.4rem', fontWeight: 300, letterSpacing: '4px', textTransform: 'uppercase', margin: '0 0 8px 0' }}>CARTEL MODELS</h1>
         <p style={{ fontSize: '0.65rem', fontWeight: 400, letterSpacing: '2px', textTransform: 'uppercase', color: '#737373', margin: 0 }}>Application Form — {selectedType}</p>
@@ -395,41 +504,10 @@ export default function App() {
           <h3 style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '20px', textAlign: 'center' }}>Media Requirements</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5' }}>1. Full-face portrait (no makeup)</span>
-              <img src={EXAMPLES.photo1} alt="Example full-face" style={{ width: '100%', height: '100%', objectFit: 'cover', border: '1px solid #171717' }} />
-              <label style={{ width: '100%', padding: '16px', backgroundColor: '#0a0a0a', border: files.photo1 ? '1px solid #fff' : '1px dashed #262626', display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-                <input type="file" name="photo1" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                <span style={{ fontSize: '0.7rem', color: '#a3a3a3' }}>{files.photo1 ? files.photo1.name : 'UPLOAD PORTRAIT'}</span>
-              </label>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5' }}>2. Profile portrait (no makeup)</span>
-              <img src={EXAMPLES.photo2} alt="Example profile" style={{ width: '100%', height: '100%', objectFit: 'cover', border: '1px solid #171717' }} />
-              <label style={{ width: '100%', padding: '16px', backgroundColor: '#0a0a0a', border: files.photo2 ? '1px solid #fff' : '1px dashed #262626', display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-                <input type="file" name="photo2" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                <span style={{ fontSize: '0.7rem', color: '#a3a3a3' }}>{files.photo2 ? files.photo2.name : 'UPLOAD PROFILE'}</span>
-              </label>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5' }}>3. Full body snapshot (light underwear)</span>
-              <img src={EXAMPLES.photo3} alt="Example full body" style={{ width: '100%', height: '100%', objectFit: 'cover', border: '1px solid #171717' }} />
-              <label style={{ width: '100%', padding: '16px', backgroundColor: '#0a0a0a', border: files.photo3 ? '1px solid #fff' : '1px dashed #262626', display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-                <input type="file" name="photo3" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                <span style={{ fontSize: '0.7rem', color: '#a3a3a3' }}>{files.photo3 ? files.photo3.name : 'UPLOAD FULL BODY'}</span>
-              </label>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5' }}>4. Vertical walking video (up to 20 seconds)</span>
-              <video src={EXAMPLES.video} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', backgroundColor: '#0a0a0a', border: '1px solid #171717' }} />
-              <label style={{ width: '100%', padding: '16px', backgroundColor: '#0a0a0a', border: files.video ? '1px solid #fff' : '1px dashed #262626', display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-                <input type="file" name="video" accept="video/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                <span style={{ fontSize: '0.7rem', color: '#a3a3a3' }}>{files.video ? files.video.name : 'UPLOAD VIDEO'}</span>
-              </label>
-            </div>
+            <MediaUploadField name="photo1" label="1. Full-face portrait (no makeup)" type="image" exampleUrl={EXAMPLES.photo1} />
+            <MediaUploadField name="photo2" label="2. Profile portrait (no makeup)" type="image" exampleUrl={EXAMPLES.photo2} />
+            <MediaUploadField name="photo3" label="3. Full body snapshot (light underwear)" type="image" exampleUrl={EXAMPLES.photo3} />
+            <MediaUploadField name="video" label="4. Vertical walking video (up to 20 seconds)" type="video" exampleUrl={EXAMPLES.video} />
 
           </div>
         </div>
