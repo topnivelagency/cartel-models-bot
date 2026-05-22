@@ -31,7 +31,6 @@ export default function App() {
     photo1: null, photo2: null, photo3: null, video: null,
   });
 
-  // Локальные ссылки для превью (Object URLs)
   const [previews, setPreviews] = useState<{ [key: string]: string }>({
     photo1: '', photo2: '', photo3: '', video: '',
   });
@@ -109,8 +108,6 @@ export default function App() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setFiles(prev => ({ ...prev, [key]: file }));
-      
-      // Создаем временный URL для отображения превью на экране
       const objectUrl = URL.createObjectURL(file);
       setPreviews(prev => ({ ...prev, [key]: objectUrl }));
     }
@@ -119,12 +116,9 @@ export default function App() {
   const handleRemoveFile = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    // Освобождаем память от созданного Object URL
     if (previews[key]) {
       URL.revokeObjectURL(previews[key]);
     }
-    
     setFiles(prev => ({ ...prev, [key]: null }));
     setPreviews(prev => ({ ...prev, [key]: '' }));
   };
@@ -175,10 +169,8 @@ export default function App() {
 
       if (dbError) throw new Error(`Database error: ${dbError.message}`);
 
-      // Сначала переключаем интерфейс на экран успеха
       setStep('SUCCESS');
       
-      // И только потом тихо уведомляем Telegram, не прерывая работу страницы
       const tg = (window as any).Telegram?.WebApp;
       if (tg && tg.sendData) {
         setTimeout(() => {
@@ -192,7 +184,7 @@ export default function App() {
     }
   };
 
-  // Компонент кастомной кнопки загрузки с переливом, превью и кнопкой отмены
+  // Поле загрузки медиа с отображением на 100% высоты (без обрезки) и цветными примерами
   const MediaUploadField = ({ name, label, type, exampleUrl }: { name: string, label: string, type: string, exampleUrl: string }) => {
     const isUploaded = !!files[name];
     const previewUrl = previews[name];
@@ -201,61 +193,53 @@ export default function App() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5', letterSpacing: '1px' }}>{label}</span>
         
-        {/* Контейнер для отображения (Превью пользователя ИЛИ Пример по умолчанию) */}
-        <div style={{ width: '100%', height: '240px', position: 'relative', overflow: 'hidden', border: '1px solid #171717', backgroundColor: '#050505' }}>
+        {/* Контейнер теперь подстраивается под высоту контента без обрезания краев */}
+        <div style={{ width: '100%', height: 'auto', maxHeight: '500px', position: 'relative', overflow: 'hidden', border: '1px solid #171717', backgroundColor: '#050505', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           {isUploaded ? (
             type === 'video' ? (
-              <video src={previewUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <video src={previewUrl} controls playsInline style={{ width: '100%', maxHeight: '500px', objectFit: 'contain' }} />
             ) : (
-              <img src={previewUrl} alt="User preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={previewUrl} alt="User preview" style={{ width: '100%', maxHeight: '500px', objectFit: 'contain' }} />
             )
           ) : (
-            // Картинка-пример по умолчанию, если ничего не прикреплено
+            // Цвета сохранены, добавлена лишь мягкая прозрачность для состояния примера
             type === 'video' ? (
-              <video src={exampleUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.4, filter: 'grayscale(100%)' }} />
+              <video src={exampleUrl} style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', opacity: 0.4 }} muted playsInline loop autoPlay />
             ) : (
-              <img src={exampleUrl} alt="Example layout" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.4, filter: 'grayscale(100%)' }} />
+              <img src={exampleUrl} alt="Example layout" style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', opacity: 0.4 }} />
             )
           )}
 
-          {/* Плашка поверх превью, если файл успешно выбран */}
           {isUploaded && (
-            <div onClick={(e) => handleRemoveFile(name, e)} style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: 'rgba(0,0,0,0.75)', color: '#ef4444', padding: '6px 10px', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid #b91c1c', cursor: 'pointer', borderRadius: '2px', display: 'flex', alignItems: 'center', gap: '4px', zIndex: 10 }}>
+            <div onClick={(e) => handleRemoveFile(name, e)} style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: 'rgba(0,0,0,0.85)', color: '#ef4444', padding: '6px 10px', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid #b91c1c', cursor: 'pointer', borderRadius: '2px', zIndex: 10 }}>
               ✕ Remove
             </div>
           )}
         </div>
 
-        {/* Кнопка загрузки с эффектом интерактивного перелива */}
-        <label className={isUploaded ? "" : "shimmer-button"} style={{ 
+        <label className={isUploaded ? "button-uploaded" : "button-shimmer"} style={{ 
           width: '100%', 
           padding: '16px', 
-          backgroundColor: '#0a0a0a', 
-          border: isUploaded ? '1px solid #ffffff' : '1px dashed #333333', 
           display: 'flex', 
           justifyContent: 'center', 
           alignItems: 'center', 
-          gap: '8px',
           cursor: 'pointer',
-          position: 'relative',
-          overflow: 'hidden',
-          transition: 'all 0.3s ease'
+          borderRadius: '2px',
+          boxSizing: 'border-box'
         }}>
           <input type="file" name={name} accept={type === 'video' ? 'video/*' : 'image/*'} onChange={handleFileChange} style={{ display: 'none' }} />
           
           {isUploaded ? (
-            // Состояние: Файл прикреплен успешно
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ffffff' }}>
               <svg style={{ width: '14px', height: '14px', color: '#ffffff' }} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              <span style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '1.5px' }}>
-                {files[name]!.name.substring(0, 15)}... — OK
+              <span style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                {files[name]!.name.substring(0, 12)}... — OK
               </span>
             </div>
           ) : (
-            // Состояние: Ожидание загрузки (с переливом)
-            <span style={{ fontSize: '0.7rem', color: '#a3a3a3', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.7rem', color: '#ffffff', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
               Upload Material
             </span>
           )}
@@ -283,7 +267,7 @@ export default function App() {
     );
   }
 
-  // --- РЕНДЕР: ПАНЕЛЬ АДМИНИСТРАТОРА ---
+  // --- РЕНДЕР: ПАНЕЛЬ АДМИНИСТРАТОРА (С УМНЫМИ ССЫЛКАМИ) ---
   if (viewMode === 'ADMIN_PANEL') {
     const filteredModels = modelsList.filter(m => m.model_type === adminTab);
 
@@ -357,17 +341,17 @@ export default function App() {
                     <p style={{ fontSize: '0.65rem', color: '#737373', margin: '0 0 2px 0', textTransform: 'uppercase' }}>Contacts</p>
                     <div><a href={`https://instagram.com/${selectedAdminModel.instagram?.replace('@','')}`} target="_blank" rel="noreferrer" style={{ color: '#fff', textDecoration: 'underline', fontSize: '0.85rem' }}>Instagram: {selectedAdminModel.instagram}</a></div>
                     
-                    <div style={{ marginTop: '4px' }}>
+                    <div style={{ marginTop: '6px' }}>
                       {selectedAdminModel.telegram_username ? (
                         <a href={`https://t.me/${selectedAdminModel.telegram_username}`} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 500 }}>
                           Open Telegram (via @{selectedAdminModel.telegram_username})
                         </a>
                       ) : selectedAdminModel.telegram_id ? (
                         <a href={`tg://user?id=${selectedAdminModel.telegram_id}`} style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 500 }}>
-                          Open Telegram (via ID)
+                          Open Telegram (via ID Чат)
                         </a>
                       ) : (
-                        <span style={{ fontSize: '0.85rem', color: '#525252' }}>No TG Link</span>
+                        <span style={{ fontSize: '0.85rem', color: '#525252' }}>No Telegram Data</span>
                       )}
                     </div>
                   </div>
@@ -421,13 +405,13 @@ export default function App() {
     );
   }
 
-  // --- РЕНДЕР: КЛИЕНТСКИЙ ВЫБОР ТИПА ---
+  // --- РЕНДЕР: ВЫБОР ТИПА ---
   if (step === 'TYPE_SELECTION') {
     return (
-      <div style={{ maxWidth: '440px', margin: '0 auto', padding: '40px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 300, letterSpacing: '5px', textTransform: 'uppercase', margin: '0 0 12px 0' }}>CARTEL MODELS</h1>
-          <p style={{ fontSize: '0.7rem', fontWeight: 400, letterSpacing: '2px', textTransform: 'uppercase', color: '#737373', margin: 0 }}>Select Type of Cooperation</p>
+      <div style={{ maxWidth: '440px', margin: '0 auto', padding: '40px 100px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ textAlignment: 'center', marginBottom: '48px' }}>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 300, letterSpacing: '5px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>CARTEL MODELS</h1>
+          <p style={{ fontSize: '0.7rem', fontWeight: 400, letterSpacing: '2px', textTransform: 'uppercase', color: '#737373', margin: 0, textAlign: 'center' }}>Select Type of Cooperation</p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -441,23 +425,30 @@ export default function App() {
     );
   }
 
-  // --- РЕНДЕР: КЛИЕНТСКАЯ АНКЕТА ---
+  // --- РЕНДЕР: АНКЕТА ФОРМЫ ---
   return (
     <div style={{ maxWidth: '440px', margin: '0 auto', padding: '24px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif' }}>
       
-      {/* Стили для анимации плавного перелива кнопок */}
+      {/* Плавные и стабильные CSS-стили для перелива без нагрузки */}
       <style>{`
-        @keyframes subtleShimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
+        @keyframes luxuryGlow {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
         }
-        .shimmer-button {
-          background: linear-gradient(90deg, #0a0a0a 0%, #141414 25%, #1f1f1f 50%, #141414 75%, #0a0a0a 100%) !important;
-          background-size: 200% 100% !important;
-          animation: subtleShimmer 4s infinite linear;
+        .button-shimmer {
+          background: linear-gradient(270deg, #0a0a0a, #1a1a1a, #2b2b2b, #1a1a1a, #0a0a0a);
+          background-size: 400% 400%;
+          animation: luxuryGlow 6s ease infinite;
+          border: 1px dashed #333333;
+          transition: border-color 0.2s ease;
         }
-        .shimmer-button:hover {
-          border-color: #525252 !important;
+        .button-shimmer:hover {
+          border-color: #737373;
+        }
+        .button-uploaded {
+          background-color: #0a0a0a;
+          border: 1px solid #ffffff;
         }
       `}</style>
 
