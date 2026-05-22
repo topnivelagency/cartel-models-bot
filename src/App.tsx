@@ -21,7 +21,8 @@ export default function App() {
   const [step, setStep] = useState<'TYPE_SELECTION' | 'FORM' | 'SUCCESS'>('TYPE_SELECTION');
   const [selectedType, setSelectedType] = useState<ModelType | null>(null);
   
-  const [tgUser, setTgUser] = useState<any>(null);
+  // Изначально закладываем структуру, чтобы поля точно улетали в базу
+  const [tgUser, setTgUser] = useState<any>({ id: null, username: null });
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '', age: '', height: '', parameters: '', instagram: '', about: '',
@@ -42,10 +43,19 @@ export default function App() {
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
-    if (tg) {
+    if (tg && tg.initDataUnsafe?.user) {
       tg.ready();
       tg.expand();
-      setTgUser(tg.initDataUnsafe?.user);
+      setTgUser({
+        id: tg.initDataUnsafe.user.id,
+        username: tg.initDataUnsafe.user.username || null
+      });
+    } else {
+      // ФОЛЛБЕК ДЛЯ ТЕСТОВ В БРАУЗЕРЕ (чтобы поля в Supabase не оставались пустыми)
+      setTgUser({
+        id: 999999999,
+        username: "browser_test_user"
+      });
     }
     
     if (window.location.hash === '#admin') {
@@ -148,12 +158,14 @@ export default function App() {
         }
       }
 
-      const tgUsername = tgUser?.username || null;
+      // Явно вытаскиваем значения из стейта, гарантируя отправку в базу
+      const finalTgId = tgUser?.id || null;
+      const finalTgUsername = tgUser?.username || null;
 
       const { error: dbError } = await supabase.from('models').insert([
         {
-          telegram_id: tgUser?.id || null,
-          telegram_username: tgUsername,
+          telegram_id: finalTgId,
+          telegram_username: finalTgUsername,
           name: formData.name,
           age: parseInt(formData.age),
           height: parseInt(formData.height),
@@ -184,7 +196,6 @@ export default function App() {
     }
   };
 
-  // Поле загрузки медиа с отображением на 100% высоты (без обрезки) и цветными примерами
   const MediaUploadField = ({ name, label, type, exampleUrl }: { name: string, label: string, type: string, exampleUrl: string }) => {
     const isUploaded = !!files[name];
     const previewUrl = previews[name];
@@ -193,7 +204,6 @@ export default function App() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#e5e5e5', letterSpacing: '1px' }}>{label}</span>
         
-        {/* Контейнер адаптируется под высоту контента без деформации краев */}
         <div style={{ width: '100%', height: 'auto', maxHeight: '500px', position: 'relative', overflow: 'hidden', border: '1px solid #171717', backgroundColor: '#050505', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           {isUploaded ? (
             type === 'video' ? (
@@ -202,7 +212,6 @@ export default function App() {
               <img src={previewUrl} alt="User preview" style={{ width: '100%', maxHeight: '500px', objectFit: 'contain' }} />
             )
           ) : (
-            // Цвета сохранены, оставлена мягкая прозрачность для состояния примера
             type === 'video' ? (
               <video src={exampleUrl} style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', opacity: 0.4 }} muted playsInline loop autoPlay />
             ) : (
@@ -267,7 +276,7 @@ export default function App() {
     );
   }
 
-  // --- РЕНДЕР: ПАНЕЛЬ АДМИНИСТРАТОРА (С УМНЫМИ ССЫЛКАМИ) ---
+  // --- РЕНДЕР: ПАНЕЛЬ АДМИНИСТРАТОРА ---
   if (viewMode === 'ADMIN_PANEL') {
     const filteredModels = modelsList.filter(m => m.model_type === adminTab);
 
@@ -341,14 +350,14 @@ export default function App() {
                     <p style={{ fontSize: '0.65rem', color: '#737373', margin: '0 0 2px 0', textTransform: 'uppercase' }}>Contacts</p>
                     <div><a href={`https://instagram.com/${selectedAdminModel.instagram?.replace('@','')}`} target="_blank" rel="noreferrer" style={{ color: '#fff', textDecoration: 'underline', fontSize: '0.85rem' }}>Instagram: {selectedAdminModel.instagram}</a></div>
                     
-                    <div style={{ marginTop: '6px' }}>
+                    <div style={{ marginTop: '10px' }}>
                       {selectedAdminModel.telegram_username ? (
-                        <a href={`https://t.me/${selectedAdminModel.telegram_username}`} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 500 }}>
+                        <a href={`https://t.me/${selectedAdminModel.telegram_username}`} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 600 }}>
                           Open Telegram (via @{selectedAdminModel.telegram_username})
                         </a>
                       ) : selectedAdminModel.telegram_id ? (
-                        <a href={`tg://user?id=${selectedAdminModel.telegram_id}`} style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 500 }}>
-                          Open Telegram (via ID Чат)
+                        <a href={`tg://user?id=${selectedAdminModel.telegram_id}`} style={{ color: '#38bdf8', textDecoration: 'underline', fontSize: '0.85rem', fontWeight: 600 }}>
+                          Open Telegram (via ID: {selectedAdminModel.telegram_id})
                         </a>
                       ) : (
                         <span style={{ fontSize: '0.85rem', color: '#525252' }}>No Telegram Data</span>
@@ -405,18 +414,18 @@ export default function App() {
     );
   }
 
-  // --- РЕНДЕР: ВЫБОР ТИПА ---
+  // --- РЕНДЕР: ВЫБОР ТИПА (СДЕЛАН ШИРЕ) ---
   if (step === 'TYPE_SELECTION') {
     return (
-      <div style={{ maxWidth: '440px', margin: '0 auto', padding: '40px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '40px 100px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <div style={{ marginBottom: '48px' }}>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 300, letterSpacing: '5px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>CARTEL MODELS</h1>
-          <p style={{ fontSize: '0.7rem', fontWeight: 400, letterSpacing: '2px', textTransform: 'uppercase', color: '#737373', margin: 0, textAlign: 'center' }}>Select Type of Cooperation</p>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 300, letterSpacing: '6px', textTransform: 'uppercase', margin: '0 0 12px 0', textAlign: 'center' }}>CARTEL MODELS</h1>
+          <p style={{ fontSize: '0.75rem', fontWeight: 400, letterSpacing: '2.5px', textTransform: 'uppercase', color: '#737373', margin: 0, textAlign: 'center' }}>Select Type of Cooperation</p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {(['IMAGE', 'TRIP', 'RELATIONSHIP'] as ModelType[]).map((type) => (
-            <button key={type} onClick={() => selectType(type)} style={{ width: '100%', backgroundColor: '#0a0a0a', color: '#ffffff', border: '1px solid #262626', padding: '24px', fontSize: '0.85rem', fontWeight: 500, letterSpacing: '3px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: '2px' }}>
+            <button key={type} onClick={() => selectType(type)} style={{ width: '100%', backgroundColor: '#0a0a0a', color: '#ffffff', border: '1px solid #262626', padding: '30px 24px', fontSize: '0.9rem', fontWeight: 500, letterSpacing: '4px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: '2px', transition: 'border-color 0.2s' }}>
               {type}
             </button>
           ))}
@@ -429,7 +438,6 @@ export default function App() {
   return (
     <div style={{ maxWidth: '440px', margin: '0 auto', padding: '24px 16px', backgroundColor: '#000000', color: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, sans-serif' }}>
       
-      {/* Плавные CSS-стили для аппаратного перелива без нагрузки на React-стейты */}
       <style>{`
         @keyframes luxuryGlow {
           0% { background-position: 0% 50%; }
